@@ -1,0 +1,61 @@
+This submission has the following files:
+
+1. README - This file
+2. kmeans - The executable for running the kmeans clustering solution
+3. hierarchial - The executable for running the hierarchial clustering solution
+4. csvs (folder) - Datasets required by the kmeans implementation. Couple of dataset files (one for the profile details and other for university admit details) are present for every department.
+5. csvs_h (folder) - Datasets required by the hierarchial clustering implementation.
+
+----------------------------------------------------------------------------
+K-means
+----------------------------------------------------------------------------
+Example to run the program:
+
+Navigate to the folder containing the program - 'kmeans'
+
+./kmeans -q 770 -v 620 -a 6 -t 100 -g 8 -m cs -n 30 -l 10
+
+The program should be run with all the above mentioned parameters. Please do not leave out any of the parameters mentioned in the example above.
+
+When the program is run you need to specify the following parameters:
+
+-q : This denotes GRE quantitative score of the user. The quantitative score is out of 800.
+
+-v : This denotes GRE verbal score of the user. The verbal score is out of 800.
+
+-a : This denotes the AWA score of the user. The AWA score is out of 6.
+
+-t : This denotes the TOEFL score of the user. TOEFL iBT score is out of 120.
+
+-g : This denotes the Grade of the user. The grade score is out of 10.
+
+-m : This is the major in which the user is interested. For example "cs" means computer science.
+
+-n : This denotes the number of top "n" recommendations required.
+
+-l : The top "n" highly ranked university recommendations required.
+
+-e : Eval
+-----------------------------------------------------------------------------
+Hierarchical clustering
+----------------------------------------------------------------------------- 
+
+Example to run the program:
+
+./hierarchial -q 770 -v 620 -a 6 -t 100 -g 8 -n 40 -l 10
+
+The program should be run with all the mentioned parameters. Please do not leave out any of the parameters mentioned in the above example. Currently our version of hierarchical clustering runs only for computer science major "cs".
+
+-q : This denotes GRE quantitative score of the user. The quantitative score is out of 800.
+
+-v : This denotes GRE verbal score of the user. The verbal score is out of 800.
+
+-a : This denotes the AWA score of the user. The AWA score is out of 6.
+
+-t : This denotes the TOEFL score of the user. TOEFL iBT score is out of 120.
+
+-g : This denotes the Grade of the user. The grade score is out of 10.
+
+-n : This denotes the number of top "n" recommendations required.
+
+-l : The top "n" highly ranked universities.
