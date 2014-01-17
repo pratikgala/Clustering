@@ -1,0 +1,307 @@
+#! /usr/bin/python
+import sys
+
+sys.path.append('/course/cs6220f13/code/opt/orange/Orange-2.6.1/install-20131012-x86_64/lib/python2.7/site-packages')
+import csv
+import Orange
+import random
+import shutil
+import os
+import copy
+from optparse import OptionParser
+from pprint import pprint
+resultsHash = {}
+outputFile = None
+topN = 0
+clusterCount = 40
+iterationCount = 10
+topElite = 0
+eliteRHash = {}
+eliteList = []
+
+def h_clustering(iris, cluster_count):
+    def getInstanceIndex(iris, e):
+        index = 0
+        for instance in iris:
+            if instance == e:
+                return index
+            index += 1
+
+    matrix = Orange.misc.SymMatrix(len(iris))
+    matrix = Orange.distance.distance_matrix(iris, Orange.distance.Manhattan)
+    clustering = Orange.clustering.hierarchical.HierarchicalClustering()
+    clustering.linkage = Orange.clustering.hierarchical.COMPLETE
+    root = clustering(matrix)
+    root.mapping.objects = iris
+    clusters = Orange.clustering.hierarchical.top_clusters(root, cluster_count)
+    ''''
+    for n, cluster in enumerate(clusters):
+        print "\n\n Cluster %i \n" % n
+        for instance in cluster:
+            print instance
+    '''
+    cmap = [None] * len(root)
+    for i, c in enumerate(clusters):
+        for e in c:
+            cmap[getInstanceIndex(iris, e)] = i
+    return cmap
+
+def updateResults(trainingClusterNumbers, inputClusterNumbers, trainingUnivFileName):
+    global resultsHash
+    resultsHash = {}
+    for currentInputClusterNumber in inputClusterNumbers:
+        if currentInputClusterNumber in resultsHash:
+            continue
+        lineNumbers = [i for i, x in enumerate(trainingClusterNumbers) if x == currentInputClusterNumber]
+        universitiesHash = {}
+        eliteUHash = {}
+        trainingUnivFile = open(trainingUnivFileName)
+        for i, line in enumerate(trainingUnivFile):
+            if i in lineNumbers:
+                updateUniversitiesHash(line.split('|')[1], universitiesHash, eliteUHash)
+        trainingUnivFile.close()
+        topNUniversities = []
+        topNEliteUniversities = []
+        i = 0
+        for currentUniversity in sorted(universitiesHash, key=universitiesHash.get, reverse=True):
+            i += 1
+            if (i > topN):
+                break;
+            topNUniversities.append(currentUniversity)
+        i = 0
+        for currentUniversity in sorted(eliteUHash, key=eliteUHash.get, reverse=True):
+            i += 1
+            if (i > topElite):
+                break;
+            topNEliteUniversities.append(currentUniversity)
+        eliteRHash[currentInputClusterNumber] = topNEliteUniversities
+        resultsHash[currentInputClusterNumber] = topNUniversities
+
+def updateResultsTest():
+    global topN
+    topN = 8
+    updateResults([0, 1, 2, 2, 1, 2, 0], [0, 1, 2, 0], "testData/testU.csv")
+    pprint(resultsHash)
+
+def updateUniversitiesHash(line, universitiesHash, eliteHash):
+    universities = line.split(';')
+    for currentUniversity in universities:
+        if ((not ("university" in currentUniversity.lower())) and (not ("college" in currentUniversity.lower()))):
+            continue
+        currentUniversity = currentUniversity.strip()
+        currentUniversity = currentUniversity.strip('"')
+
+        if currentUniversity:
+            if currentUniversity in eliteList:
+                if currentUniversity in eliteHash:
+                    eliteHash[currentUniversity] += 1
+                else:
+                    eliteHash[currentUniversity] = 1
+            else:
+                if currentUniversity in universitiesHash:
+                    universitiesHash[currentUniversity] += 1
+                else:
+                    universitiesHash[currentUniversity] = 1
+
+def updateUniversitiesHashTest():
+    testHash = {}
+    updateUniversitiesHash(" Arizona State University;Iowa State University;Syracuse University;University of Colorado Boulder;University of Illinois Chicago;University of Pennsylvania;University of Southern California;", testHash)
+    if (len(testHash) != 7):
+        print "Length failure in updateUniversitiesHashTest"
+        from pprint import pprint
+        pprint(testHash)
+        return False
+    if ((testHash["Arizona State University"] !=1) or (testHash["Iowa State University"] !=1) or (testHash["Syracuse University"] !=1) or (testHash["University of Colorado Boulder"] !=1) or (testHash["University of Illinois Chicago"] !=1) or (testHash["University of Pennsylvania"] !=1) or (testHash["University of Southern California"] !=1)):
+        print "Count Failure in updateUniversitiesHashTest"
+        pprint(testHash)
+        return False
+    return True
+
+'''
+Evaluation Helpers
+'''
+def generateRejections(appliedUniversities, admittedUniversities):
+    rejectedUniversities = []
+    for currentApplied in appliedUniversities:
+        if (not (currentApplied in admittedUniversities)):
+            rejectedUniversities.append(currentApplied)
+    return rejectedUniversities
+
+def getDissimilarityScore(clusterResult, admitted, rejected):
+    DS = 0
+    for currentAdmitted in admitted:
+        for currentReject in rejected:
+            if ((currentAdmitted in clusterResult) and (currentReject in clusterResult)):
+                if (clusterResult.index(currentAdmitted) < clusterResult.index(currentReject)):
+                    DS -= 1
+                else:
+                    DS += 1
+    return DS
+
+'''
+Test Harness
+'''
+def testHarness():
+    if (not updateUniversitiesHashTest()):
+        return False
+    updateResultsTest()
+    print "All tests passed!"
+
+claParser = OptionParser()
+claParser.add_option("-q", "--quantitative", dest="quantitative", help="GRE Quantitative score out of 800", metavar="QUANTS")
+claParser.add_option("-v", "--verbal", dest="verbal", help="GRE Verbal score out of 800", metavar="VERBAL")
+claParser.add_option("-a", "--awa", dest="awa", help="GRE AWA score out of 6", metavar="AWA")
+claParser.add_option("-t", "--toefl", dest="toefl", help="TOEFL iBT score out of 120", metavar="TOEFL")
+claParser.add_option("-g", "--grade", dest="grade", help="Grade out of 10", metavar="GRADE")
+claParser.add_option("-n", "--topn", dest="topn", help="Top n recommendations required", metavar="TOPN")
+claParser.add_option("-l", "--elite", dest="elite", help="Top n Highly selective universities")
+
+(options, args) = claParser.parse_args()
+
+quantitave=options.quantitative
+verbal=options.verbal
+awa=options.awa
+toefl=options.toefl
+if (options.grade):
+    grade=float(options.grade)
+if (options.topn):
+    topN=int(options.topn)
+major='cs'
+evalRun = False
+if (options.elite):
+    topElite = int(options.elite)
+
+statsFilePath = ""
+univFilePath = ""
+evalFilePath = ""
+elitePath = ""
+basePath = "csvs_h/"
+evalPath = "csvs_h/ev/"
+
+if major == "cs":
+    statsFilePath = basePath + "ComputerScience_Orange.csv"
+    univFilePath = basePath + "ComputerScience2.csv"
+    elitePath = basePath + "CS_Elite.txt"
+    evalFilePath = evalPath + "CS_e.csv"
+    evalResults = evalPath + "CS_er.csv"
+elif major == "mis":
+    statsFilePath = basePath + "MIS_Orange.csv"
+    univFilePath = basePath + "MIS2.csv"
+    elitePath = basePath + "MIS_Elite.txt"
+    evalFilePath = evalPath + "mis_e.csv"
+    evalResults = evalPath + "mis_er.csv"
+elif major == "ece":
+    statsFilePath = basePath + "Electronics_Orange.csv"
+    univFilePath = basePath + "Electronics2.csv"
+    elitePath = basePath + "ECE_Elite.txt"
+    evalFilePath = evalPath + "ece_e.csv"
+    evalResults = evalPath + "ece_er.csv"
+elif major == "ee":
+    statsFilePath = basePath + "ElectricalEngg_Orange.csv"
+    univFilePath = basePath + "ElectricalEngg2.csv"
+    elitePath = basePath + "EE_Elite.txt"
+    evalFilePath = evalPath + "ee_e.csv"
+    evalResults = evalPath + "ee_er.csv"
+elif major == "mech":
+    statsFilePath = basePath + "Mechanical_Orange.csv"
+    univFilePath = basePath + "Mechanical2.csv"
+    elitePath = basePath + "M_Elite.txt"
+    evalFilePath = evalPath + "m_e.csv"
+    evalResults = evalPath + "m_er.csv"
+else:
+    print "Invalid Major. Please use --help to see valid major values"
+    sys.exit()
+
+if evalRun:
+    topN = float("inf")
+    DSHash = {}
+    random.seed(42)
+    edulix = Orange.data.Table(statsFilePath)
+    km = h_clustering(edulix, clusterCount)
+    trainingClusterNumbers = km[:]
+    updateResults(trainingClusterNumbers, range(clusterCount), univFilePath)
+    testHash = copy.deepcopy(resultsHash)
+    evalStatsFile = open(evalFilePath)
+    evalResultsFile = open(evalResults)
+    evalStatLines = evalStatsFile.readlines()
+    evalResultLines = evalResultsFile.readlines()
+    truths = []
+    for currentIndex in range(len(evalStatLines)):
+       shutil.copyfile(statsFilePath, './temp.csv')
+       currentEvalStat = evalStatLines[currentIndex]
+       with open('./temp.csv', 'a') as test_file:
+           test_file.write(currentEvalStat)
+           '''
+           csv_writer = csv.writer(test_file)
+           stats = currentEvalStat.split(",")
+           statsAA = [[stat] for stat in stats]
+           length = len(statsAA[0])
+           for y in range(length):
+               csv_writer.writerow([x[y] for x in statsAA])
+           '''
+           test_file.close()
+       random.seed(42)
+       edulix = Orange.data.Table("temp.csv")
+       km = h_clustering(edulix, clusterCount)
+       print(km)
+       len_csv=len(list(csv.reader(open(statsFilePath)))) - 1
+       trainingClusterNumbers = km[:len_csv]
+       testClusterNumbers = km[-1:]
+       clusterTruth = testClusterNumbers[0]
+       os.remove("./temp.csv")
+       currentResultLine = evalResultLines[currentIndex]
+       appliedUniversities = currentResultLine.split("|")[0].split(";")
+       admittedUniversities = currentResultLine.split("|")[1].split(";")
+       rejectedUniversities = generateRejections(appliedUniversities, admittedUniversities)
+       lowestDS = float("inf")
+       for currentClusterNumber in range(clusterCount):
+           currentDS = getDissimilarityScore(testHash[currentClusterNumber], admittedUniversities, rejectedUniversities)
+           #print "DS for cluster number " + str(currentClusterNumber) + ":" + str(currentDS)
+           if currentDS <= lowestDS:
+               if (currentDS == lowestDS) and (groundTruth == clusterTruth):
+                   continue
+               groundTruth = currentClusterNumber
+               lowestDS = currentDS
+       #print "Lowest DS is " + str(lowestDS) + " and ground truth is:
+       truths.append([clusterTruth, groundTruth])
+    pprint(truths)
+    sys.exit()
+
+eliteFile = open(elitePath)
+for i, line in enumerate(eliteFile):
+    currentLine = line.strip()
+    currentLine = currentLine.strip('"')
+    eliteList.append(currentLine)
+
+hello = [[quantitave],[verbal],[awa],[toefl],[grade]]
+length = len(hello[0])
+shutil.copyfile(statsFilePath, './temp.csv')
+with open('./temp.csv', 'a') as test_file:
+    csv_writer = csv.writer(test_file, delimiter='\t')
+    for y in range(length):
+        csv_writer.writerow([x[y] for x in hello])
+        test_file.flush()
+    test_file.close()
+
+random.seed(42)
+edulix = Orange.data.Table("temp.csv")
+km = h_clustering(edulix, clusterCount)
+#pprint(km)
+len_csv=len(list(csv.reader(open(statsFilePath))))
+trainingClusterNumbers = km[:len_csv]
+testClusterNumbers = km[-1:]
+os.remove("./temp.csv")
+updateResults(trainingClusterNumbers, testClusterNumbers, univFilePath)
+#print testClusterNumbers[0]
+uList = resultsHash[testClusterNumbers[0]]
+eList = eliteRHash[testClusterNumbers[0]]
+print "----------------------------------------------------"
+print "The Recommended list of Highly Ranked Universities:"
+print "----------------------------------------------------"
+for eU in eList:
+    print eU
+print "-------------------------------------------"
+print "The Recommended list of other universities:"
+print "-------------------------------------------"
+for uU in uList:
+    print uU
